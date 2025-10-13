@@ -1,0 +1,69 @@
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww]in32/
+[Bb]uild/
+[Bb]in/
+[Oo]bj/
+*.obj
+*.lib
+*.exp
+*.pdb
+*.idb
+*.ilk
+*.pch
+*.log
+*.tlog
+*.cache
+*.lastbuildstate
+*.sdf
+*.ipch
+*.db
+*.opendb
+*.user
+*.suo
+*.sdf
+*.VC.db
+*.VC.opendb
+*.VC.VC.opendb
+*.VC.VC.db
+*.enc
+*.bak
+*.tmp
+*.manifest
+*.dll
+*.exe
+
+# Visual Studio settings
+.vs/
+*.VC.db
+*.VC.opendb
+
+# Windows specific
+Thumbs.db
+Desktop.ini
+
+# NuGet
+*.nupkg
+packages/
+*.snupkg
+
+# Backup and temp files
+*.bak
+*.tmp
+*.swp
+*.swo
+*.log
+
+# CMake / other build systems (if used)
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Project specific (optional)
+# If you want to exclude local test data or GDT outputs
+*.gdt.json
+*.gdt.bak
