@@ -1,0 +1,6 @@
+﻿  pch.cpp
+  dllmain.cpp
+  GDTLib.cpp
+  Generating Code...
+     Creating library C:\Users\aidan\Desktop\GDTLib\x64\Debug\GDTLib.lib and object C:\Users\aidan\Desktop\GDTLib\x64\Debug\GDTLib.exp
+  GDTLib.vcxproj -> C:\Users\aidan\Desktop\GDTLib\x64\Debug\GDTLib.dll

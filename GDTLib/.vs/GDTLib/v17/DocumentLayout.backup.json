@@ -1,0 +1,104 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\aidan\\Desktop\\GDTLib\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{158C3D14-5EF3-483B-AF74-107958381837}|GDTLib.vcxproj|C:\\Users\\aidan\\Desktop\\GDTLib\\GDTLib.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{158C3D14-5EF3-483B-AF74-107958381837}|GDTLib.vcxproj|solutionrelative:GDTLib.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{5ECE328F-EDBA-4937-9520-A595CED70465}|..\\GDTClient\\GDTClient.vcxproj|C:\\Users\\aidan\\Desktop\\GDTClient\\GDTClient.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{158C3D14-5EF3-483B-AF74-107958381837}|GDTLib.vcxproj|C:\\Users\\aidan\\Desktop\\GDTLib\\XAsset.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{158C3D14-5EF3-483B-AF74-107958381837}|GDTLib.vcxproj|solutionrelative:XAsset.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{158C3D14-5EF3-483B-AF74-107958381837}|GDTLib.vcxproj|C:\\Users\\aidan\\Desktop\\GDTLib\\dllmain.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{158C3D14-5EF3-483B-AF74-107958381837}|GDTLib.vcxproj|solutionrelative:dllmain.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{158C3D14-5EF3-483B-AF74-107958381837}|GDTLib.vcxproj|C:\\Users\\aidan\\Desktop\\GDTLib\\GDTLib.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{158C3D14-5EF3-483B-AF74-107958381837}|GDTLib.vcxproj|solutionrelative:GDTLib.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 2,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "XAsset.h",
+              "DocumentMoniker": "C:\\Users\\aidan\\Desktop\\GDTLib\\XAsset.h",
+              "RelativeDocumentMoniker": "XAsset.h",
+              "ToolTip": "C:\\Users\\aidan\\Desktop\\GDTLib\\XAsset.h",
+              "RelativeToolTip": "XAsset.h",
+              "ViewState": "AgIAAAMAAAAAAAAAAAAAACcAAAAgAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-10-11T13:46:22.182Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "GDTClient.cpp",
+              "DocumentMoniker": "C:\\Users\\aidan\\Desktop\\GDTClient\\GDTClient.cpp",
+              "RelativeDocumentMoniker": "..\\GDTClient\\GDTClient.cpp",
+              "ToolTip": "C:\\Users\\aidan\\Desktop\\GDTClient\\GDTClient.cpp",
+              "RelativeToolTip": "..\\GDTClient\\GDTClient.cpp",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAoAAAAaAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-10-11T13:38:21.451Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "GDTLib.cpp",
+              "DocumentMoniker": "C:\\Users\\aidan\\Desktop\\GDTLib\\GDTLib.cpp",
+              "RelativeDocumentMoniker": "GDTLib.cpp",
+              "ToolTip": "C:\\Users\\aidan\\Desktop\\GDTLib\\GDTLib.cpp",
+              "RelativeToolTip": "GDTLib.cpp",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAB4AAAAFAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-10-11T13:19:27.514Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "GDTLib.h",
+              "DocumentMoniker": "C:\\Users\\aidan\\Desktop\\GDTLib\\GDTLib.h",
+              "RelativeDocumentMoniker": "GDTLib.h",
+              "ToolTip": "C:\\Users\\aidan\\Desktop\\GDTLib\\GDTLib.h",
+              "RelativeToolTip": "GDTLib.h",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAAGAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-10-11T13:13:48.207Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "dllmain.cpp",
+              "DocumentMoniker": "C:\\Users\\aidan\\Desktop\\GDTLib\\dllmain.cpp",
+              "RelativeDocumentMoniker": "dllmain.cpp",
+              "ToolTip": "C:\\Users\\aidan\\Desktop\\GDTLib\\dllmain.cpp",
+              "RelativeToolTip": "dllmain.cpp",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-10-11T13:11:39.565Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

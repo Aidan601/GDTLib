@@ -1,0 +1,92 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\aidan\\Desktop\\GDTClient\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{158C3D14-5EF3-483B-AF74-107958381837}|..\\GDTLib\\GDTLib.vcxproj|C:\\Users\\aidan\\Desktop\\GDTLib\\GDT.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{158C3D14-5EF3-483B-AF74-107958381837}|..\\GDTLib\\GDTLib.vcxproj|C:\\Users\\aidan\\Desktop\\GDTLib\\GDTLib.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{5ECE328F-EDBA-4937-9520-A595CED70465}|GDTClient.vcxproj|C:\\Users\\aidan\\Desktop\\GDTClient\\GDTClient.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{5ECE328F-EDBA-4937-9520-A595CED70465}|GDTClient.vcxproj|solutionrelative:GDTClient.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{158C3D14-5EF3-483B-AF74-107958381837}|..\\GDTLib\\GDTLib.vcxproj|C:\\Users\\aidan\\Desktop\\GDTLib\\XAsset.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 0,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "GDT.h",
+              "DocumentMoniker": "C:\\Users\\aidan\\Desktop\\GDTLib\\GDT.h",
+              "RelativeDocumentMoniker": "..\\GDTLib\\GDT.h",
+              "ToolTip": "C:\\Users\\aidan\\Desktop\\GDTLib\\GDT.h",
+              "RelativeToolTip": "..\\GDTLib\\GDT.h",
+              "ViewState": "AgIAABAAAAAAAAAAAADwvycAAAASAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-10-11T14:51:40.377Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "GDTLib.cpp",
+              "DocumentMoniker": "C:\\Users\\aidan\\Desktop\\GDTLib\\GDTLib.cpp",
+              "RelativeDocumentMoniker": "..\\GDTLib\\GDTLib.cpp",
+              "ToolTip": "C:\\Users\\aidan\\Desktop\\GDTLib\\GDTLib.cpp",
+              "RelativeToolTip": "..\\GDTLib\\GDTLib.cpp",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAMAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-10-11T16:31:52.235Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "GDTClient.cpp",
+              "DocumentMoniker": "C:\\Users\\aidan\\Desktop\\GDTClient\\GDTClient.cpp",
+              "RelativeDocumentMoniker": "GDTClient.cpp",
+              "ToolTip": "C:\\Users\\aidan\\Desktop\\GDTClient\\GDTClient.cpp",
+              "RelativeToolTip": "GDTClient.cpp",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAEAAAAQAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-10-11T13:21:37.641Z",
+              "EditorCaption": ""
+            }
+          ]
+        },
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 0,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "XAsset.h",
+              "DocumentMoniker": "C:\\Users\\aidan\\Desktop\\GDTLib\\XAsset.h",
+              "RelativeDocumentMoniker": "..\\GDTLib\\XAsset.h",
+              "ToolTip": "C:\\Users\\aidan\\Desktop\\GDTLib\\XAsset.h",
+              "RelativeToolTip": "..\\GDTLib\\XAsset.h",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAADYAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-10-11T14:51:47.496Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
