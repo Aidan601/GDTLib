@@ -16,6 +16,8 @@ public:
     std::string Type = "";
     std::map<std::string, std::string> value;
 
+    xasset() = default;
+
     // Constructor
     xasset(std::string nameInput, std::string typeInput)
     {
