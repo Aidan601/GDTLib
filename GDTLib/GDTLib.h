@@ -8,3 +8,4 @@
 
 extern "C" GDTLIB_API int GdtAdd(int a, int b);
 extern "C" GDTLIB_API const char *GdtVersion();
+

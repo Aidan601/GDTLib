@@ -1,12 +1,15 @@
 #pragma once
 
-#include <cstdlib>
 #include <iostream>
 #include <map>
 #include <string>
-#include <unordered_map>
-#include <utility>
 #include <vector>
+#include <algorithm> // std::remove_if
+#include <chrono>	 // time funcs
+#include <fstream>
+#include <sstream>
+#include <filesystem>
+#include <cstdlib>      // for _dupenv_s
 
 #include "XAsset.h"
 
@@ -15,176 +18,133 @@ class gdt
 public:
 	std::string Name;
 	std::string RelPath;
-	std::string AbsPath;
-	std::string Hash; // placeholder for later
+	int Time;
+	std::vector<xasset> Assets;
 
-	// Group assets by type, then list of assets for that type
-	std::map<XType, std::vector<xasset>> XAssetsByType;
-
-	// Fast lookup by name -> (type, index in vector)
-	std::unordered_map<std::string, std::pair<XType, std::size_t>> IndexByName;
-
-	explicit gdt(std::string nameInput)
-		: Name(std::move(nameInput)),
-		  RelPath(std::string("source_data\\") + Name + ".gdt") {}
-
-	// Build AbsPath using TA_TOOLS_PATH; prints an error if missing
-	std::string GetAbsPath()
+	gdt()
 	{
-		char *ta_env = nullptr;
+		Name = "";
+		RelPath = "";
+		Time = 0;
+		Assets = {};
+	}
+	
+	gdt(std::string nameInput, std::string relPathInput, int timeInput)
+	{
+		Name = std::move(nameInput);
+		RelPath = std::move(relPathInput);
+		Time = timeInput;
+		Assets = {};
+	}
+
+	std::string GetAbsPath() const
+	{
+		char* ta_env = nullptr;
 		size_t len = 0;
-		if (_dupenv_s(&ta_env, &len, "TA_TOOLS_PATH") == 0 && ta_env)
+
+		// Safe environment variable access
+		if (_dupenv_s(&ta_env, &len, "TA_TOOLS_PATH") != 0 || ta_env == nullptr)
 		{
-			AbsPath = std::string(ta_env) + "\\" + RelPath;
-			free(ta_env); // must free what _dupenv_s allocates
-			return AbsPath;
+			std::cerr << "Error: TA_TOOLS_PATH environment variable not set.\n";
+			return "";
 		}
 
-		if (ta_env)
-		{
-			AbsPath = std::string(ta_env) + "\\" + RelPath;
-			return AbsPath;
-		}
-		std::cerr << "Error: TA_TOOLS_PATH environment variable not set.\n";
-		AbsPath.clear();
-		return AbsPath;
+		// Build full path using std::filesystem to ensure proper joining
+		std::filesystem::path basePath(ta_env);
+		free(ta_env); // must free what _dupenv_s allocates
+
+		std::filesystem::path rel(RelPath);
+		std::filesystem::path full = basePath / rel;
+
+		return full.string();
 	}
 
-	// Insert or replace by name. Returns true if inserted new, false if replaced.
-	bool AddXAsset(const xasset &asset)
+	// Add an asset
+	void AddAsset(const xasset &asset)
 	{
-		if (asset.Name.empty())
-		{
-			std::cerr << "Error: xasset has empty Name; cannot add to GDT.\n";
+		Assets.push_back(asset);
+	}
+
+	// Remove all assets with a matching name; returns true if anything was removed
+	bool RemoveAssetByName(const std::string &assetName)
+	{
+		auto it = std::remove_if(Assets.begin(), Assets.end(),
+								 [&](const xasset &a)
+								 { return a.Name == assetName; });
+		bool removed = (it != Assets.end());
+		if (removed)
+			Assets.erase(it, Assets.end());
+		return removed;
+	}
+
+	// Optional: remove by index (bounds-checked)
+	bool RemoveAssetAt(size_t index)
+	{
+		if (index >= Assets.size())
 			return false;
-		}
-
-		std::unordered_map<std::string, std::pair<XType, std::size_t>>::iterator it =
-			IndexByName.find(asset.Name);
-
-		if (it != IndexByName.end())
-		{
-			// Replace existing (may also migrate type if changed)
-			XType oldType = it->second.first;
-			std::size_t idx = it->second.second;
-
-			if (oldType == asset.Type)
-			{
-				XAssetsByType[oldType][idx] = asset;
-				return false; // replaced in-place
-			}
-			else
-			{
-				// Remove from old type vector by swap-pop, update moved index
-				std::vector<xasset> &vecOld = XAssetsByType[oldType];
-				if (idx < vecOld.size())
-				{
-					bool isLast = (idx == vecOld.size() - 1);
-					if (!isLast)
-					{
-						vecOld[idx] = vecOld.back();
-						// Fix index of the element we just moved into idx
-						IndexByName[vecOld[idx].Name] = std::make_pair(oldType, idx);
-					}
-					vecOld.pop_back();
-				}
-				// Add into new type vector
-				std::vector<xasset> &vecNew = XAssetsByType[asset.Type];
-				vecNew.push_back(asset);
-				it->second = std::make_pair(asset.Type, vecNew.size() - 1);
-				return false; // treated as replace (name existed)
-			}
-		}
-
-		// Fresh insert
-		std::vector<xasset> &vec = XAssetsByType[asset.Type];
-		vec.push_back(asset);
-		IndexByName.emplace(asset.Name, std::make_pair(asset.Type, vec.size() - 1));
+		Assets.erase(Assets.begin() + static_cast<std::ptrdiff_t>(index));
 		return true;
 	}
 
-	// Lookup by name; pointer valid until vector reallocation for that type
-	xasset *GetXAsset(const std::string &name)
+	// Find an asset by name (mutable)
+	xasset *GetAssetByName(const std::string &assetName)
 	{
-		std::unordered_map<std::string, std::pair<XType, std::size_t>>::const_iterator it =
-			IndexByName.find(name);
-		if (it == IndexByName.end())
-			return nullptr;
-
-		XType t = it->second.first;
-		std::size_t idx = it->second.second;
-
-		std::map<XType, std::vector<xasset>>::iterator mapIt = XAssetsByType.find(t);
-		if (mapIt == XAssetsByType.end())
-			return nullptr;
-
-		std::vector<xasset> &vec = mapIt->second;
-		return (idx < vec.size()) ? &vec[idx] : nullptr;
+		for (auto &a : Assets)
+			if (a.Name == assetName)
+				return &a;
+		return nullptr;
 	}
 
-	// Readonly access to list by type
-	const std::vector<xasset> *GetXAssets(XType type) const
+	// Find an asset by name (const)
+	const xasset *GetAssetByName(const std::string &assetName) const
 	{
-		std::map<XType, std::vector<xasset>>::const_iterator it =
-			XAssetsByType.find(type);
-		return (it == XAssetsByType.end()) ? nullptr : &it->second;
+		for (const auto &a : Assets)
+			if (a.Name == assetName)
+				return &a;
+		return nullptr;
 	}
 
-	// Remove by name; returns true if removed
-	bool RemoveByName(const std::string &name)
+	// Debug helper
+	void PrintAssets() const
 	{
-		std::unordered_map<std::string, std::pair<XType, std::size_t>>::iterator it =
-			IndexByName.find(name);
-		if (it == IndexByName.end())
+		std::cout << "Assets in GDT '" << Name << "':\n";
+		for (const auto &a : Assets)
+			std::cout << " - " << a.Name << " (" << a.Type << ")\n";
+	}
+
+	// Write a minimal GDT file with placeholder content
+	bool WriteGDTFile() const
+	{
+		namespace fs = std::filesystem;
+		try
+		{
+			// Determine absolute path (using RelPath)
+			fs::path path = GetAbsPath();
+
+			// Ensure parent directories exist
+			if (path.has_parent_path())
+				fs::create_directories(path.parent_path());
+
+			std::ofstream out(path, std::ios::out | std::ios::trunc);
+			if (!out.is_open())
+			{
+				std::cerr << "Error: Failed to open file for writing: " << path << "\n";
+				return false;
+			}
+
+			// Write minimal content (placeholder)
+			std::cout << Assets.size() << "\n";
+			for (int i = 0; i < Assets.size(); ++i)
+				out << (i == 0 ? "{\n\t\"" : ",\n\t\"") << Assets[i].Name << "\"";	
+
+			out.close();
+			std::cout << "Wrote minimal GDT to: " << path << "\n";
+			return true;
+		}
+		catch (const std::exception& e)
+		{
+			std::cerr << "Exception writing GDT file: " << e.what() << "\n";
 			return false;
-
-		XType t = it->second.first;
-		std::size_t idx = it->second.second;
-
-		std::map<XType, std::vector<xasset>>::iterator mIt = XAssetsByType.find(t);
-		if (mIt == XAssetsByType.end())
-		{
-			IndexByName.erase(it);
-			return false;
 		}
-
-		std::vector<xasset> &vec = mIt->second;
-		if (idx >= vec.size())
-		{
-			IndexByName.erase(it);
-			return false;
-		}
-
-		bool isLast = (idx == vec.size() - 1);
-		if (!isLast)
-		{
-			vec[idx] = vec.back();
-			IndexByName[vec[idx].Name] = std::make_pair(t, idx);
-		}
-		vec.pop_back();
-		IndexByName.erase(it);
-		return true;
 	}
-
-	// Counts
-	std::size_t Count(XType t) const
-	{
-		std::map<XType, std::vector<xasset>>::const_iterator it =
-			XAssetsByType.find(t);
-		return (it == XAssetsByType.end()) ? 0 : it->second.size();
-	}
-
-	std::size_t TotalCount() const
-	{
-		std::size_t n = 0;
-		for (std::map<XType, std::vector<xasset>>::const_iterator it = XAssetsByType.begin();
-			 it != XAssetsByType.end(); ++it)
-		{
-			n += it->second.size();
-		}
-		return n;
-	}
-
-	// Debug string
-	std::string ToString() const { return "GDT file '" + Name + "'"; }
 };
