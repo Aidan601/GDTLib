@@ -39,7 +39,7 @@ public:
     // Build full absolute path using TA_TOOLS_PATH
     std::string GetAbsPath() const
     {
-        char* ta_env = nullptr;
+        char *ta_env = nullptr;
         size_t len = 0;
 
         if (_dupenv_s(&ta_env, &len, "TA_TOOLS_PATH") != 0 || ta_env == nullptr)
@@ -58,26 +58,26 @@ public:
     }
 
     //  Add or replace asset
-    void AddAsset(const xasset& asset)
+    void AddAsset(const xasset &asset)
     {
         Assets[asset.Name] = asset; // insert or overwrite
     }
 
     //  Remove asset by name; returns true if removed
-    bool RemoveAssetByName(const std::string& assetName)
+    bool RemoveAssetByName(const std::string &assetName)
     {
         return Assets.erase(assetName) > 0;
     }
 
     //  Get asset by name (mutable)
-    xasset* GetAssetByName(const std::string& assetName)
+    xasset *GetAssetByName(const std::string &assetName)
     {
         auto it = Assets.find(assetName);
         return (it != Assets.end()) ? &it->second : nullptr;
     }
 
     //  Get asset by name (const)
-    const xasset* GetAssetByName(const std::string& assetName) const
+    const xasset *GetAssetByName(const std::string &assetName) const
     {
         auto it = Assets.find(assetName);
         return (it != Assets.end()) ? &it->second : nullptr;
@@ -87,7 +87,7 @@ public:
     void PrintAssets() const
     {
         std::cout << "Assets in GDT '" << Name << "':\n";
-        for (const auto& [name, a] : Assets)
+        for (const auto &[name, a] : Assets)
             std::cout << " - " << name << " (" << a.Type << ")\n";
     }
 
@@ -112,7 +112,8 @@ public:
             out << "{\n";
             for (auto it = Assets.begin(); it != Assets.end(); ++it)
             {
-                if (it != Assets.begin()) out << ",\n";
+                if (it != Assets.begin())
+                    out << ",\n";
                 out << "\t\"" << it->first << "\"";
             }
             out << "\n}\n";
@@ -121,7 +122,7 @@ public:
             std::cout << "Wrote minimal GDT to: " << path << "\n";
             return true;
         }
-        catch (const std::exception& e)
+        catch (const std::exception &e)
         {
             std::cerr << "Exception writing GDT file: " << e.what() << "\n";
             return false;

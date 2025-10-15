@@ -75,6 +75,7 @@
     "future": "cpp",
     "queue": "cpp",
     "regex": "cpp",
-    "unordered_set": "cpp"
+    "unordered_set": "cpp",
+    "set": "cpp"
   }
 }
