@@ -11,7 +11,6 @@
 using namespace gdtlib;  // so we can call getAllGDTs() etc. directly
 
 int main() {
-    SetConsoleOutputCP(CP_UTF8);
     auto all = getAllGDTs();
     if (all.empty()) {
         std::cout << "No GDTs parsed.\n";
@@ -48,7 +47,7 @@ int main() {
 
         // Each xasset already knows which GDT it's from (a.GdtRelPath)
         a.LoadValuesFromSource();   // parse the .gdt file automatically
-        a.PrintValues();
+        std::cout << a.GetValue("image_rewardImage");
         std::cout << std::endl;
     }
 

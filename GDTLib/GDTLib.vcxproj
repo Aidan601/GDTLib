@@ -141,6 +141,20 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
     </Link>
+    <PostBuildEvent>
+      <Command>if not exist "$(ProjectDir)include" mkdir "$(ProjectDir)include"
+
+rem Copy headers from project root (overwrite)
+for %%F in ("$(ProjectDir)*.h") do copy /Y "%%~fF" "$(ProjectDir)include\"
+
+rem If you also keep headers in a GDTLib folder (top-level only), copy those too
+if exist "$(ProjectDir)GDTLib\" (
+  for %%F in ("$(ProjectDir)GDTLib\*.h") do copy /Y "%%~fF" "$(ProjectDir)include\"
+)
+
+exit /b 0
+</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="framework.h" />
