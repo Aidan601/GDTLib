@@ -7,6 +7,7 @@ x86/
 [Bb]uild/
 [Bb]in/
 [Oo]bj/
+include/
 *.obj
 *.lib
 *.exp
