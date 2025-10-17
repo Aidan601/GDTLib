@@ -76,6 +76,10 @@
     "queue": "cpp",
     "regex": "cpp",
     "unordered_set": "cpp",
-    "set": "cpp"
+    "set": "cpp",
+    "cwctype": "cpp",
+    "coroutine": "cpp",
+    "resumable": "cpp",
+    "shared_mutex": "cpp"
   }
 }

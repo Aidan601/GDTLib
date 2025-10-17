@@ -1,6 +1,17 @@
 #ifndef XASSET_H
 #define XASSET_H
 
+// --- Windows Unicode APIs needed for WideCharToMultiByte / MultiByteToWideChar
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <Windows.h>   // pulls in winnls.h where CP_UTF8 is defined
+#endif
+
 #include <iostream>
 #include <string>
 #include <map>
@@ -8,8 +19,9 @@
 #include <fstream>
 #include <string_view>
 #include <cctype>
-#include <cstring>   // std::strcmp
-#include <sqlite3.h> // kept in case other parts still use it
+#include <cstring>
+#include <cstdlib>       // for free()
+#include <sqlite3.h>
 #include "db.h"
 
 class xasset
