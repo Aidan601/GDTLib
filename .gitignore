@@ -1,0 +1,36 @@
+Set-Content -Encoding ascii .gitignore @"
+# Visual Studio cache
+.vs/
+*.user
+*.suo
+*.VC.db
+*.VC.opendb
+ipch/
+
+# Build dirs & temp
+x64/
+x86/
+Debug/
+Release/
+[Bb]uild*/
+out/
+
+# Compiled/binary artifacts
+*.exe
+*.dll
+*.lib
+*.pdb
+*.obj
+*.idb
+*.ilk
+*.log
+*.tlog
+
+# CMake/Qt cruft
+CMakeFiles/
+CMakeCache.txt
+*.cmake
+*.moc
+*.qrc.depends
+*.autogen/
+"@
