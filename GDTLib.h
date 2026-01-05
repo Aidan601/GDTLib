@@ -33,19 +33,22 @@ struct sqlite3_stmt;
 #define GDTDB_CAPI extern "C" __declspec(dllimport)
 #endif
 
-GDTDB_API const char *GetRootPath();
-GDTDB_API const char *GetGdtDbPath();
+GDTDB_API const char* GetRootPath();
+GDTDB_API const char* GetGdtDbPath();
 GDTDB_API bool RunGdtDbUpdate();
+GDTDB_API bool RunGdtDbRebuild();
 
 GDTDB_CAPI int GdtDB_Init();
-GDTDB_CAPI sqlite3 *GdtDB_Get();
+GDTDB_CAPI sqlite3* GdtDB_Get();
 GDTDB_CAPI void GdtDB_Shutdown();
 
 GDTDB_API std::map<std::string, gdt> GetGDTs();
 GDTDB_API std::map<std::string, entity> GetEntities();
-GDTDB_API std::map<std::string, entity> GetEntities(const gdt &GDT);
+GDTDB_API std::map<std::string, entity> GetEntities(const gdt& GDT);
 GDTDB_API std::unordered_map<int, std::map<std::string, entity>> GetEntitiesByGdt();
+GDTDB_API std::map<std::string, std::string> GetEntityProperties(const entity& ent);
+GDTDB_API bool WriteGDTToFile(const gdt& GDT);
 
 // (Optional) Let callers override where to load sqlite64r.dll from.
 // If not called, we default to:  GetRootPath() + "\\bin"
-GDTDB_API void GdtDB_SetSqliteBinDir(const wchar_t *bo3BinDirW);
+GDTDB_API void GdtDB_SetSqliteBinDir(const wchar_t* bo3BinDirW);

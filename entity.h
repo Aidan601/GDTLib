@@ -77,6 +77,4 @@ private:
         else
             return "unknown_gdf";
     }
-
-
 };

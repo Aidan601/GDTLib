@@ -9,6 +9,8 @@
 #include <map>
 #include <unordered_map>
 #include <mutex>
+#include <cctype>
+#include <fstream>
 
 #include <windows.h>
 #include <sqlite3.h>   // internal only
@@ -371,6 +373,149 @@ GDTDB_API std::map<std::string, entity> GetEntities(const gdt& GDT) {
     return results;
 }
 
+// Allow only identifiers that are safe to embed in SQL when quoting isn't possible
+// (table names can't be bound as parameters, so we must construct those parts).
+static bool IsSafeSqlIdentifier(const std::string& s) {
+    if (s.empty()) return false;
+    for (unsigned char c : s) {
+        if (!(std::isalnum(c) || c == '_')) return false;
+    }
+    return true;
+}
+
+static std::string QuoteIdent(const std::string& ident) {
+    // SQLite uses double-quotes for identifiers. Escape any embedded quotes defensively.
+    std::string out;
+    out.reserve(ident.size() + 2);
+    out.push_back('"');
+    for (char c : ident) {
+        if (c == '"') out.push_back('"');
+        out.push_back(c);
+    }
+    out.push_back('"');
+    return out;
+}
+
+GDTDB_API std::map<std::string, std::string> GetEntityProperties(const entity& ent)
+{
+    std::map<std::string, std::string> results;
+
+    sqlite3* db = GdtDB_Get();
+    if (!db) return results;
+
+    // 1) Determine which GDF table to read from (e.g., "material", "tagfx", ...).
+    const std::string table = ent.gdfName;
+    if (!IsSafeSqlIdentifier(table) || table == "unknown_gdf")
+        return results;
+
+    // 2) Discover columns for that table via PRAGMA table_info(...)
+    //    (so we don't need sqlite3_column_count/column_name symbols).
+    std::vector<std::string> cols;
+    {
+        std::string pragmaSql = "PRAGMA table_info(" + QuoteIdent(table) + ");";
+        sqlite3_stmt* stmtCols = nullptr;
+
+        int rc = g_sql.prepare_v2(db, pragmaSql.c_str(), -1, &stmtCols, nullptr);
+        if (rc != SQLITE_OK || !stmtCols)
+            return results;
+
+        while ((rc = g_sql.step(stmtCols)) == SQLITE_ROW) {
+            // PRAGMA table_info(...) returns: cid, name, type, notnull, dflt_value, pk
+            const unsigned char* nameU8 = g_sql.column_text(stmtCols, 1);
+            std::string col = reinterpret_cast<const char*>(nameU8 ? nameU8 : (const unsigned char*)"");
+            if (col.empty()) continue;
+
+            // Skip internal bookkeeping columns.
+            if (col == "PK_id" || col == "_precalc_md5" || col == "_derived_bits")
+                continue;
+
+            cols.emplace_back(std::move(col));
+        }
+
+        g_sql.finalize(stmtCols);
+    }
+
+    if (cols.empty())
+        return results;
+
+    // 3) Read the row by PK_id (this should match _entity.PK_id in gdtdb).
+    std::string selectSql = "SELECT ";
+    for (size_t i = 0; i < cols.size(); ++i) {
+        if (i) selectSql += ",";
+        selectSql += QuoteIdent(cols[i]);
+    }
+    selectSql += " FROM " + QuoteIdent(table) + " WHERE PK_id = ?;";
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = g_sql.prepare_v2(db, selectSql.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK || !stmt)
+        return results;
+
+    g_sql.bind_int(stmt, 1, ent.id);
+
+    rc = g_sql.step(stmt);
+    if (rc == SQLITE_ROW) {
+        for (int i = 0; i < static_cast<int>(cols.size()); ++i) {
+            const int t = g_sql.column_type(stmt, i);
+            if (t == SQLITE_NULL) {
+                results[cols[i]] = "";
+                continue;
+            }
+
+            // For numeric/text types, sqlite3_column_text returns a UTF-8 representation.
+            // We skip blobs by design ("_derived_bits" was already removed).
+            const unsigned char* vU8 = g_sql.column_text(stmt, i);
+            results[cols[i]] = reinterpret_cast<const char*>(vU8 ? vU8 : (const unsigned char*)"");
+        }
+    }
+
+    g_sql.finalize(stmt);
+    return results;
+}
+
+static std::string ToLowerASCII(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (unsigned char c : s) out.push_back((char)std::tolower(c));
+    return out;
+}
+
+GDTDB_API bool WriteGDTToFile(const gdt& GDT) {
+    std::string filePath = "C:\\Users\\aidan\\Downloads\\test.gdt";
+    auto entities = GetEntities(GDT);
+
+    std::ofstream file(filePath);
+    if (!file.is_open()) return false;
+
+    file << "{\n";
+    for (const auto& [name, ent] : entities)
+    {
+        file << "\t\"" << name << "\" ( \"" << ent.gdfName << ".gdf\" )\n\t{\n";
+
+        auto props = GetEntityProperties(ent);
+
+        // Copy to vector and sort case-insensitively (with a tie-breaker)
+        std::vector<std::pair<std::string, std::string>> sorted(props.begin(), props.end());
+        std::sort(sorted.begin(), sorted.end(),
+            [](const auto& a, const auto& b) {
+                const std::string al = ToLowerASCII(a.first);
+                const std::string bl = ToLowerASCII(b.first);
+                if (al != bl) return al < bl;
+                return a.first < b.first; // tie-break so ordering is strict & deterministic
+            });
+
+        for (const auto& [propName, propValue] : sorted)
+        {
+            if (propName != "_name")
+                file << "\t\t\"" << propName << "\" \"" << propValue << "\"\n";
+        }
+
+        file << "\t}\n";
+    }
+    file << "}";
+    return true;
+}
+
 // ============================================================================
 // Launch gdtdb.exe /update and print its stdout/stderr
 // ============================================================================
@@ -385,6 +530,83 @@ GDTDB_API bool RunGdtDbUpdate() {
     std::string cmd = "\"";
     cmd += exePath;
     cmd += "\" /update";
+
+    // Create pipes for stdout/stderr capture
+    SECURITY_ATTRIBUTES sa{};
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+    sa.lpSecurityDescriptor = nullptr;
+
+    HANDLE hRead = nullptr, hWrite = nullptr;
+    if (!CreatePipe(&hRead, &hWrite, &sa, 0)) return false;
+    if (!SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, 0)) {
+        CloseHandle(hRead); CloseHandle(hWrite);
+        return false;
+    }
+
+    STARTUPINFOA si{};
+    PROCESS_INFORMATION pi{};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdOutput = hWrite;  // redirect child's stdout
+    si.hStdError = hWrite;  // redirect child's stderr
+    si.hStdInput = nullptr;
+
+    BOOL ok = CreateProcessA(
+        nullptr,
+        cmd.data(),
+        nullptr, nullptr,
+        TRUE,                   // inherit handles so child can use hWrite
+        CREATE_NO_WINDOW,
+        nullptr, nullptr,
+        &si, &pi
+    );
+
+    // Parent doesn't need the write end
+    CloseHandle(hWrite);
+
+    if (!ok) {
+        CloseHandle(hRead);
+        return false;
+    }
+
+    // Read child's combined stdout/stderr and print it
+    char buffer[4096];
+    DWORD bytesRead = 0;
+    for (;;) {
+        BOOL readOK = ReadFile(hRead, buffer, sizeof(buffer) - 1, &bytesRead, nullptr);
+        if (!readOK || bytesRead == 0) break;
+        buffer[bytesRead] = '\0';
+        // Print exactly what the exe produced:
+        std::fwrite(buffer, 1, bytesRead, stdout);
+        std::fflush(stdout);
+    }
+
+    CloseHandle(hRead);
+
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD exitCode = 1;
+    GetExitCodeProcess(pi.hProcess, &exitCode);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+
+    return exitCode == 0;
+}
+
+// ============================================================================
+// Launch gdtdb.exe /rebuild and print its stdout/stderr
+// ============================================================================
+GDTDB_API bool RunGdtDbRebuild() {
+    const char* root = GetRootPath();
+    if (!root || !*root) return false;
+
+    char exePath[MAX_PATH];
+    std::snprintf(exePath, sizeof(exePath), "%s\\gdtdb\\gdtdb.exe", root);
+    if (GetFileAttributesA(exePath) == INVALID_FILE_ATTRIBUTES) return false;
+
+    std::string cmd = "\"";
+    cmd += exePath;
+    cmd += "\" /rebuild";
 
     // Create pipes for stdout/stderr capture
     SECURITY_ATTRIBUTES sa{};
