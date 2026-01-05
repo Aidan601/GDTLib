@@ -1,7 +1,0 @@
-{
-  "files.associations": {
-    "*.gsc": "gsc",
-    "xstring": "cpp",
-    "filesystem": "cpp"
-  }
-}
