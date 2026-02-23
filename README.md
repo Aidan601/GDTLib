@@ -28,8 +28,6 @@ Build outputs:
 - `x64/Debug/GDTLib.dll` - Debug DLL
 - `x64/Debug/GDTLib.lib` - Import library
 
-The post-build step automatically copies headers, DLL, and lib to the APEx project directory.
-
 ## API Reference
 
 ### Initialization
