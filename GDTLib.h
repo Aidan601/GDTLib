@@ -75,6 +75,27 @@ GDTDB_API bool RenameAssetInGDT(const std::string& oldName, const std::string& n
 // Returns true on success, false on failure
 GDTDB_API bool DeleteAssetFromGDT(const std::string& assetName, const std::string& gdtPath);
 
+// Get an entity by its database ID
+GDTDB_API entity FindEntityById(int entityId);
+
+// Get the parent entity name for a derived asset
+// Returns empty string if the entity has no parent
+GDTDB_API std::string GetParentEntityName(const entity& ent);
+
+// Get resolved properties for an entity (merges parent properties with child overrides)
+// This walks up the inheritance chain and returns the final property values
+GDTDB_API std::map<std::string, std::string> GetResolvedEntityProperties(const entity& ent);
+
+// Create a new derived asset (child of another asset)
+// Returns true on success, false on failure
+GDTDB_API bool CreateDerivedAsset(const std::string& assetName, const std::string& parentAssetName,
+                                   const std::string& gdtPath);
+
+// Append a derived asset with given properties to GDT file
+// Only writes properties that differ from the parent
+GDTDB_API bool AppendDerivedAssetToGDT(const std::string& assetName, const std::string& parentAssetName,
+                                        const std::string& gdtPath, const std::map<std::string, std::string>& properties);
+
 // (Optional) Let callers override where to load sqlite64r.dll from.
 // If not called, we default to:  GetRootPath() + "\\bin"
 GDTDB_API void GdtDB_SetSqliteBinDir(const wchar_t* bo3BinDirW);

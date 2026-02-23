@@ -15,6 +15,7 @@ public:
 	int lineNum;
 	int bExport = 0;
 	std::string gdfName;
+	std::string parentName;  // Name of parent entity for derived assets
 
 	entity()
     {
@@ -26,6 +27,7 @@ public:
         gdtId = -1;
         lineNum = -1;
         gdfName = "";
+        parentName = "";
 	}
 
 	entity(int idInput, std::string nameInput, int gdtSeqNumInput, int parentIdInput, int gdfIdInput, int gdtIdInput, int lineNumInput)

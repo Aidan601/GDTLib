@@ -200,8 +200,10 @@ GDTDB_API std::map<std::string, entity> GetEntities() {
     if (!db) return results;
 
     const char* sql =
-        "SELECT PK_id, name, iGdtSeqNum, FK_parent_id, FK_gdf, FK_gdt, _gdt_linenum, bExport "
-        "FROM _entity;";
+        "SELECT e.PK_id, e.name, e.iGdtSeqNum, e.FK_parent_id, e.FK_gdf, e.FK_gdt, e._gdt_linenum, e.bExport, "
+        "p.name AS parent_name "
+        "FROM _entity e "
+        "LEFT JOIN _entity p ON e.FK_parent_id = p.PK_id;";
 
     sqlite3_stmt* stmt = nullptr;
     int rc = g_sql.prepare_v2(db, sql, -1, &stmt, nullptr);
@@ -216,11 +218,13 @@ GDTDB_API std::map<std::string, entity> GetEntities() {
         const int gdtID = g_sql.column_int(stmt, 5);
         const int lineNum = g_sql.column_int(stmt, 6);
         const int bExport = g_sql.column_int(stmt, 7);
+        const unsigned char* parentNameU8 = g_sql.column_text(stmt, 8);
 
         entity e(id,
             reinterpret_cast<const char*>(nameU8 ? nameU8 : (const unsigned char*)""),
             seqNum, parentID, gdfID, gdtID, lineNum);
         e.bExport = bExport;
+        e.parentName = reinterpret_cast<const char*>(parentNameU8 ? parentNameU8 : (const unsigned char*)"");
 
         results[e.name] = std::move(e);
     }
@@ -237,8 +241,11 @@ GDTDB_API std::unordered_map<int, std::map<std::string, entity>> GetEntitiesByGd
 
     g_sql.exec(db, "BEGIN;", nullptr, nullptr, nullptr);
     const char* sql =
-        "SELECT PK_id, name, iGdtSeqNum, FK_parent_id, FK_gdf, FK_gdt, _gdt_linenum, bExport "
-        "FROM _entity ORDER BY FK_gdt, iGdtSeqNum;";
+        "SELECT e.PK_id, e.name, e.iGdtSeqNum, e.FK_parent_id, e.FK_gdf, e.FK_gdt, e._gdt_linenum, e.bExport, "
+        "p.name AS parent_name "
+        "FROM _entity e "
+        "LEFT JOIN _entity p ON e.FK_parent_id = p.PK_id "
+        "ORDER BY e.FK_gdt, e.iGdtSeqNum;";
 
     sqlite3_stmt* stmt = nullptr;
     int rc = g_sql.prepare_v2(db, sql, -1, &stmt, nullptr);
@@ -256,11 +263,13 @@ GDTDB_API std::unordered_map<int, std::map<std::string, entity>> GetEntitiesByGd
         const int gdtID = g_sql.column_int(stmt, 5);
         const int lineNum = g_sql.column_int(stmt, 6);
         const int bExport = g_sql.column_int(stmt, 7);
+        const unsigned char* parentNameU8 = g_sql.column_text(stmt, 8);
 
         entity e(id,
             reinterpret_cast<const char*>(nameU8 ? nameU8 : (const unsigned char*)""),
             seqNum, parentID, gdfID, gdtID, lineNum);
         e.bExport = bExport;
+        e.parentName = reinterpret_cast<const char*>(parentNameU8 ? parentNameU8 : (const unsigned char*)"");
 
         grouped[gdtID].emplace(e.name, std::move(e));
     }
@@ -277,8 +286,11 @@ GDTDB_API std::map<std::string, entity> GetEntities(const gdt& GDT) {
     if (!db) return results;
 
     const char* sql =
-        "SELECT PK_id, name, iGdtSeqNum, FK_parent_id, FK_gdf, FK_gdt, _gdt_linenum, bExport "
-        "FROM _entity WHERE FK_gdt = ? ORDER BY iGdtSeqNum;";
+        "SELECT e.PK_id, e.name, e.iGdtSeqNum, e.FK_parent_id, e.FK_gdf, e.FK_gdt, e._gdt_linenum, e.bExport, "
+        "p.name AS parent_name "
+        "FROM _entity e "
+        "LEFT JOIN _entity p ON e.FK_parent_id = p.PK_id "
+        "WHERE e.FK_gdt = ? ORDER BY e.iGdtSeqNum;";
 
     sqlite3_stmt* stmt = nullptr;
     int rc = g_sql.prepare_v2(db, sql, -1, &stmt, nullptr);
@@ -295,11 +307,13 @@ GDTDB_API std::map<std::string, entity> GetEntities(const gdt& GDT) {
         const int gdtID = g_sql.column_int(stmt, 5);
         const int lineNum = g_sql.column_int(stmt, 6);
         const int bExport = g_sql.column_int(stmt, 7);
+        const unsigned char* parentNameU8 = g_sql.column_text(stmt, 8);
 
         entity e(id,
             reinterpret_cast<const char*>(nameU8 ? nameU8 : (const unsigned char*)""),
             seqNum, parentID, gdfID, gdtID, lineNum);
         e.bExport = bExport;
+        e.parentName = reinterpret_cast<const char*>(parentNameU8 ? parentNameU8 : (const unsigned char*)"");
 
         results[e.name] = std::move(e);
     }
@@ -318,10 +332,13 @@ entity FindEntityByName(const std::string& name)
     if (!db)
         return ent;
 
-    // SQL query to find entity by name
+    // SQL query to find entity by name (with parent name join)
     const char* sql =
-        "SELECT PK_id, name, iGdtSeqNum, FK_parent_id, FK_gdf, FK_gdt, _gdt_linenum, bExport "
-        "FROM _entity WHERE name = ? LIMIT 1;";
+        "SELECT e.PK_id, e.name, e.iGdtSeqNum, e.FK_parent_id, e.FK_gdf, e.FK_gdt, e._gdt_linenum, e.bExport, "
+        "p.name AS parent_name "
+        "FROM _entity e "
+        "LEFT JOIN _entity p ON e.FK_parent_id = p.PK_id "
+        "WHERE e.name = ? LIMIT 1;";
 
     sqlite3_stmt* stmt = nullptr;
     int rc = g_sql.prepare_v2(db, sql, -1, &stmt, nullptr);
@@ -346,12 +363,14 @@ entity FindEntityByName(const std::string& name)
         const int gdtID = g_sql.column_int(stmt, 5);
         const int lineNum = g_sql.column_int(stmt, 6);
         const int bExport = g_sql.column_int(stmt, 7);
+        const unsigned char* parentNameU8 = g_sql.column_text(stmt, 8);
 
         // Construct entity object
         ent = entity(id,
             reinterpret_cast<const char*>(nameU8 ? nameU8 : (const unsigned char*)""),
             seqNum, parentID, gdfID, gdtID, lineNum);
         ent.bExport = bExport;
+        ent.parentName = reinterpret_cast<const char*>(parentNameU8 ? parentNameU8 : (const unsigned char*)"");
     }
 
     g_sql.finalize(stmt);
@@ -510,7 +529,14 @@ GDTDB_API bool WriteGDTToFile(const gdt& GDT) {
     file << "{\n";
     for (const auto& [name, ent] : entities)
     {
-        file << "\t\"" << name << "\" ( \"" << ent.gdfName << ".gdf\" )\n\t{\n";
+        // Check if this is a derived asset (has a parent)
+        if (!ent.parentName.empty()) {
+            // Derived asset: use brackets with parent name
+            file << "\t\"" << name << "\" [ \"" << ent.parentName << "\" ]\n\t{\n";
+        } else {
+            // Regular asset: use parentheses with GDF type
+            file << "\t\"" << name << "\" ( \"" << ent.gdfName << ".gdf\" )\n\t{\n";
+        }
 
         auto props = GetEntityProperties(ent);
 
@@ -550,19 +576,36 @@ GDTDB_API bool WriteAssetToGDT(const std::string& assetName, const std::string& 
                          std::istreambuf_iterator<char>());
     inFile.close();
 
-    // Find the asset entry: "assetname" (
+    // Find the asset entry: "assetname" ( for regular assets or "assetname" [ for derived assets
     std::string assetPattern = "\"" + assetName + "\" (";
     size_t assetStart = content.find(assetPattern);
+    char closingChar = ')';  // Track which closing char to look for
+
     if (assetStart == std::string::npos) {
-        // Try alternate format without space
+        // Try alternate format without space (regular asset)
         assetPattern = "\"" + assetName + "\"(";
         assetStart = content.find(assetPattern);
-        if (assetStart == std::string::npos)
-            return false;
     }
 
-    // Find the closing paren after the asset type
-    size_t parenClose = content.find(')', assetStart);
+    if (assetStart == std::string::npos) {
+        // Try derived asset format with brackets
+        assetPattern = "\"" + assetName + "\" [";
+        assetStart = content.find(assetPattern);
+        closingChar = ']';
+    }
+
+    if (assetStart == std::string::npos) {
+        // Try alternate derived format without space
+        assetPattern = "\"" + assetName + "\"[";
+        assetStart = content.find(assetPattern);
+        closingChar = ']';
+    }
+
+    if (assetStart == std::string::npos)
+        return false;
+
+    // Find the closing paren/bracket after the asset type
+    size_t parenClose = content.find(closingChar, assetStart);
     if (parenClose == std::string::npos)
         return false;
 
@@ -634,16 +677,30 @@ GDTDB_API bool RenameAssetInGDT(const std::string& oldName, const std::string& n
                          std::istreambuf_iterator<char>());
     inFile.close();
 
-    // Find the asset entry by OLD name: "oldname" (
+    // Find the asset entry by OLD name: "oldname" ( or "oldname" [
     std::string assetPattern = "\"" + oldName + "\" (";
     size_t assetStart = content.find(assetPattern);
+    char closingChar = ')';
+
     if (assetStart == std::string::npos) {
-        // Try alternate format without space
         assetPattern = "\"" + oldName + "\"(";
         assetStart = content.find(assetPattern);
-        if (assetStart == std::string::npos)
-            return false;
     }
+
+    if (assetStart == std::string::npos) {
+        assetPattern = "\"" + oldName + "\" [";
+        assetStart = content.find(assetPattern);
+        closingChar = ']';
+    }
+
+    if (assetStart == std::string::npos) {
+        assetPattern = "\"" + oldName + "\"[";
+        assetStart = content.find(assetPattern);
+        closingChar = ']';
+    }
+
+    if (assetStart == std::string::npos)
+        return false;
 
     // Find where the old name ends (the closing quote)
     size_t nameStart = assetStart + 1;  // Skip opening quote
@@ -655,17 +712,33 @@ GDTDB_API bool RenameAssetInGDT(const std::string& oldName, const std::string& n
     content.replace(nameStart, nameEnd - nameStart, newName);
 
     // Now find the properties block (recalculate positions after name change)
+    // Try both regular and derived asset patterns
     assetPattern = "\"" + newName + "\" (";
     assetStart = content.find(assetPattern);
+    closingChar = ')';
+
     if (assetStart == std::string::npos) {
         assetPattern = "\"" + newName + "\"(";
         assetStart = content.find(assetPattern);
-        if (assetStart == std::string::npos)
-            return false;
     }
 
-    // Find the closing paren after the asset type
-    size_t parenClose = content.find(')', assetStart);
+    if (assetStart == std::string::npos) {
+        assetPattern = "\"" + newName + "\" [";
+        assetStart = content.find(assetPattern);
+        closingChar = ']';
+    }
+
+    if (assetStart == std::string::npos) {
+        assetPattern = "\"" + newName + "\"[";
+        assetStart = content.find(assetPattern);
+        closingChar = ']';
+    }
+
+    if (assetStart == std::string::npos)
+        return false;
+
+    // Find the closing paren/bracket after the asset type
+    size_t parenClose = content.find(closingChar, assetStart);
     if (parenClose == std::string::npos)
         return false;
 
@@ -975,19 +1048,33 @@ GDTDB_API bool DeleteAssetFromGDT(const std::string& assetName, const std::strin
     if (content.find("\r\n") != std::string::npos)
         lineEnding = "\r\n";
 
-    // Find the asset entry: "assetname" (
+    // Find the asset entry: "assetname" ( or "assetname" [
     std::string assetPattern = "\"" + assetName + "\" (";
     size_t assetStart = content.find(assetPattern);
+    char closingChar = ')';
+
     if (assetStart == std::string::npos) {
-        // Try alternate format without space
         assetPattern = "\"" + assetName + "\"(";
         assetStart = content.find(assetPattern);
-        if (assetStart == std::string::npos)
-            return false;  // Asset not found in file
     }
 
-    // Find the closing paren after the asset type
-    size_t parenClose = content.find(')', assetStart);
+    if (assetStart == std::string::npos) {
+        assetPattern = "\"" + assetName + "\" [";
+        assetStart = content.find(assetPattern);
+        closingChar = ']';
+    }
+
+    if (assetStart == std::string::npos) {
+        assetPattern = "\"" + assetName + "\"[";
+        assetStart = content.find(assetPattern);
+        closingChar = ']';
+    }
+
+    if (assetStart == std::string::npos)
+        return false;  // Asset not found in file
+
+    // Find the closing paren/bracket after the asset type
+    size_t parenClose = content.find(closingChar, assetStart);
     if (parenClose == std::string::npos)
         return false;
 
@@ -1065,6 +1152,201 @@ GDTDB_API bool DeleteAssetFromGDT(const std::string& assetName, const std::strin
 
     // Write the file back using binary mode to preserve line endings
     std::ofstream outFile(gdtPath, std::ios::trunc | std::ios::binary);
+    if (!outFile.is_open())
+        return false;
+
+    outFile << content;
+    outFile.close();
+
+    return true;
+}
+
+// ============================================================================
+// Find entity by database ID
+// ============================================================================
+GDTDB_API entity FindEntityById(int entityId)
+{
+    entity ent;
+
+    sqlite3* db = GdtDB_Get();
+    if (!db)
+        return ent;
+
+    const char* sql =
+        "SELECT e.PK_id, e.name, e.iGdtSeqNum, e.FK_parent_id, e.FK_gdf, e.FK_gdt, e._gdt_linenum, e.bExport, "
+        "p.name AS parent_name "
+        "FROM _entity e "
+        "LEFT JOIN _entity p ON e.FK_parent_id = p.PK_id "
+        "WHERE e.PK_id = ? LIMIT 1;";
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = g_sql.prepare_v2(db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK || !stmt)
+        return ent;
+
+    g_sql.bind_int(stmt, 1, entityId);
+
+    rc = g_sql.step(stmt);
+    if (rc == SQLITE_ROW) {
+        const int id = g_sql.column_int(stmt, 0);
+        const unsigned char* nameU8 = g_sql.column_text(stmt, 1);
+        const int seqNum = g_sql.column_int(stmt, 2);
+        const int parentID = (g_sql.column_type(stmt, 3) == SQLITE_NULL) ? -1 : g_sql.column_int(stmt, 3);
+        const int gdfID = g_sql.column_int(stmt, 4);
+        const int gdtID = g_sql.column_int(stmt, 5);
+        const int lineNum = g_sql.column_int(stmt, 6);
+        const int bExport = g_sql.column_int(stmt, 7);
+        const unsigned char* parentNameU8 = g_sql.column_text(stmt, 8);
+
+        ent = entity(id,
+            reinterpret_cast<const char*>(nameU8 ? nameU8 : (const unsigned char*)""),
+            seqNum, parentID, gdfID, gdtID, lineNum);
+        ent.bExport = bExport;
+        ent.parentName = reinterpret_cast<const char*>(parentNameU8 ? parentNameU8 : (const unsigned char*)"");
+    }
+
+    g_sql.finalize(stmt);
+    return ent;
+}
+
+// ============================================================================
+// Get parent entity name for a derived asset
+// ============================================================================
+GDTDB_API std::string GetParentEntityName(const entity& ent)
+{
+    if (ent.parentId <= 0)
+        return "";
+
+    entity parent = FindEntityById(ent.parentId);
+    return parent.name;
+}
+
+// ============================================================================
+// Get resolved properties (merges parent properties with child overrides)
+// ============================================================================
+GDTDB_API std::map<std::string, std::string> GetResolvedEntityProperties(const entity& ent)
+{
+    std::map<std::string, std::string> resolved;
+
+    // Build inheritance chain (child -> parent -> grandparent -> ...)
+    std::vector<entity> chain;
+    entity current = ent;
+    while (current.id != -1) {
+        chain.push_back(current);
+        if (current.parentId <= 0)
+            break;
+        current = FindEntityById(current.parentId);
+    }
+
+    // Apply properties from root (oldest ancestor) to leaf (the entity itself)
+    // Later properties override earlier ones
+    for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+        auto props = GetEntityProperties(*it);
+        for (const auto& [key, value] : props) {
+            resolved[key] = value;
+        }
+    }
+
+    return resolved;
+}
+
+// ============================================================================
+// Create a new derived asset
+// ============================================================================
+GDTDB_API bool CreateDerivedAsset(const std::string& assetName, const std::string& parentAssetName,
+                                   const std::string& gdtPath) {
+    if (assetName.empty() || parentAssetName.empty() || gdtPath.empty())
+        return false;
+
+    // Check if asset already exists
+    entity existing = FindEntityByName(assetName);
+    if (existing.id != -1)
+        return false; // Asset already exists
+
+    // Read the entire GDT file
+    std::ifstream inFile(gdtPath);
+    if (!inFile.is_open())
+        return false;
+
+    std::string content((std::istreambuf_iterator<char>(inFile)),
+                         std::istreambuf_iterator<char>());
+    inFile.close();
+
+    // Find the last closing brace (the end of the GDT)
+    size_t lastBrace = content.rfind('}');
+    if (lastBrace == std::string::npos)
+        return false;
+
+    // Build the new derived asset entry (empty properties - inherits all from parent)
+    std::string newEntry = "\t\"" + assetName + "\" [ \"" + parentAssetName + "\" ]\n\t{\n\t}\n";
+
+    // Insert the new entry before the last closing brace
+    std::string before = content.substr(0, lastBrace);
+    std::string after = content.substr(lastBrace);
+    content = before + newEntry + after;
+
+    // Write the file back
+    std::ofstream outFile(gdtPath, std::ios::trunc);
+    if (!outFile.is_open())
+        return false;
+
+    outFile << content;
+    outFile.close();
+
+    return true;
+}
+
+// ============================================================================
+// Append a derived asset with given properties to GDT file
+// ============================================================================
+GDTDB_API bool AppendDerivedAssetToGDT(const std::string& assetName, const std::string& parentAssetName,
+                                        const std::string& gdtPath, const std::map<std::string, std::string>& properties) {
+    if (assetName.empty() || parentAssetName.empty() || gdtPath.empty())
+        return false;
+
+    // Read the entire GDT file
+    std::ifstream inFile(gdtPath);
+    if (!inFile.is_open())
+        return false;
+
+    std::string content((std::istreambuf_iterator<char>(inFile)),
+                         std::istreambuf_iterator<char>());
+    inFile.close();
+
+    // Find the last closing brace (the end of the GDT)
+    size_t lastBrace = content.rfind('}');
+    if (lastBrace == std::string::npos)
+        return false;
+
+    // Build the new derived asset entry
+    std::string newEntry = "\t\"" + assetName + "\" [ \"" + parentAssetName + "\" ]\n\t{\n";
+
+    // Sort properties case-insensitively
+    std::vector<std::pair<std::string, std::string>> sorted(properties.begin(), properties.end());
+    std::sort(sorted.begin(), sorted.end(),
+        [](const auto& a, const auto& b) {
+            const std::string al = ToLowerASCII(a.first);
+            const std::string bl = ToLowerASCII(b.first);
+            if (al != bl) return al < bl;
+            return a.first < b.first;
+        });
+
+    for (const auto& [propName, propValue] : sorted) {
+        // Skip internal keys
+        if (propName.empty() || propName[0] == '_')
+            continue;
+        newEntry += "\t\t\"" + propName + "\" \"" + propValue + "\"\n";
+    }
+
+    newEntry += "\t}\n";
+
+    // Insert the new entry before the last closing brace
+    std::string before = content.substr(0, lastBrace);
+    std::string after = content.substr(lastBrace);
+    content = before + newEntry + after;
+
+    // Write the file back
+    std::ofstream outFile(gdtPath, std::ios::trunc);
     if (!outFile.is_open())
         return false;
 
