@@ -1,4 +1,4 @@
-// GDTLib.cpp � dynamic-loads BO3's sqlite64r.dll from TA_TOOLS_PATH\bin
+// GDTLib.cpp - uses statically linked SQLite
 #include "pch.h"
 
 #include <cstdio>
@@ -13,7 +13,7 @@
 #include <fstream>
 
 #include <windows.h>
-#include <sqlite3.h>   // internal only
+#include "sqlite3.h"   // statically linked
 
 #include "gdt.h"
 #include "entity.h"
@@ -24,41 +24,6 @@
 // ============================================================================
 static sqlite3* g_db = nullptr;
 static std::mutex g_dbMutex;
-
-// ============================================================================
-// Helpers
-// ============================================================================
-static bool FileExistsW(const std::wstring& path) {
-    DWORD attrs = GetFileAttributesW(path.c_str());
-    return attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY);
-}
-
-static std::wstring Utf8ToWide(const char* s) {
-    if (!s) return {};
-    int n = MultiByteToWideChar(CP_UTF8, 0, s, -1, nullptr, 0);
-    std::wstring w(n ? n - 1 : 0, L'\0');
-    if (n) MultiByteToWideChar(CP_UTF8, 0, s, -1, w.data(), n);
-    return w;
-}
-
-static HMODULE LoadSqliteFromFullPath(const std::wstring& fullPath) {
-    // A) simplest � load by full path
-    HMODULE mod = LoadLibraryW(fullPath.c_str());
-    if (mod) return mod;
-
-    // B) safe search model � search the DLL's own dir for its deps
-    SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR);
-    mod = LoadLibraryExW(fullPath.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR);
-    if (mod) return mod;
-
-    // C) legacy fallback � temporarily put dir on search path
-    std::wstring dir = fullPath.substr(0, fullPath.find_last_of(L"\\/"));
-    SetDllDirectoryW(dir.c_str());
-    mod = LoadLibraryW(fullPath.c_str());
-    SetDllDirectoryW(L"");
-
-    return mod;
-}
 
 // ============================================================================
 // Public path helpers
@@ -77,99 +42,40 @@ GDTDB_API const char* GetGdtDbPath() {
 }
 
 // ============================================================================
-// Dynamic SQLite loader (only symbols used here)
+// Static SQLite wrapper (mimics old dynamic API for minimal code changes)
 // ============================================================================
 namespace {
     struct SqliteAPI {
-        HMODULE mod{};
+        // Direct function pointers to static SQLite functions
+        decltype(&sqlite3_open_v2) open_v2 = sqlite3_open_v2;
+        decltype(&sqlite3_close_v2) close_v2 = sqlite3_close_v2;
+        decltype(&sqlite3_exec) exec = sqlite3_exec;
+        decltype(&sqlite3_prepare_v2) prepare_v2 = sqlite3_prepare_v2;
+        decltype(&sqlite3_step) step = sqlite3_step;
+        decltype(&sqlite3_finalize) finalize = sqlite3_finalize;
+        decltype(&sqlite3_busy_timeout) busy_timeout = sqlite3_busy_timeout;
+        decltype(&sqlite3_errmsg) errmsg = sqlite3_errmsg;
+        decltype(&sqlite3_bind_int) bind_int = sqlite3_bind_int;
+        decltype(&sqlite3_bind_text) bind_text = sqlite3_bind_text;
+        decltype(&sqlite3_column_text) column_text = sqlite3_column_text;
+        decltype(&sqlite3_column_int) column_int = sqlite3_column_int;
+        decltype(&sqlite3_column_type) column_type = sqlite3_column_type;
+        decltype(&sqlite3_libversion) libversion = sqlite3_libversion;
+        decltype(&sqlite3_libversion_number) libversion_number = sqlite3_libversion_number;
 
-        // Core API used in this file
-        int(__cdecl* open_v2)(const char*, sqlite3**, int, const char*) = nullptr;
-        int(__cdecl* close_v2)(sqlite3*) = nullptr;
-        int(__cdecl* exec)(sqlite3*, const char*, int(*)(void*, int, char**, char**), void*, char**) = nullptr;
-        int(__cdecl* prepare_v2)(sqlite3*, const char*, int, sqlite3_stmt**, const char**) = nullptr;
-        int(__cdecl* step)(sqlite3_stmt*) = nullptr;
-        int(__cdecl* finalize)(sqlite3_stmt*) = nullptr;
-        int(__cdecl* busy_timeout)(sqlite3*, int) = nullptr;
-        const char* (__cdecl* errmsg)(sqlite3*) = nullptr;
-
-        int(__cdecl* bind_int)(sqlite3_stmt*, int, int) = nullptr;
-        const unsigned char* (__cdecl* column_text)(sqlite3_stmt*, int) = nullptr;
-        int(__cdecl* column_int)(sqlite3_stmt*, int) = nullptr;
-        int(__cdecl* column_type)(sqlite3_stmt*, int) = nullptr;
-
-        // Optional version probes
-        const char* (__cdecl* libversion)() = nullptr;
-        int(__cdecl* libversion_number)() = nullptr;
-
-        bool loaded() const noexcept { return mod != nullptr; }
+        bool loaded() const noexcept { return true; } // Always loaded (static)
     };
 
     static SqliteAPI g_sql;
-    static std::wstring g_forcedSqliteBinDir; // optional override via API
-
-    template<typename T>
-    static void Require(T*& fn, HMODULE m, const char* name) {
-        fn = reinterpret_cast<T*>(GetProcAddress(m, name));
-        if (!fn) {
-            std::string msg = "Missing SQLite symbol: ";
-            msg += name;
-            throw std::runtime_error(msg);
-        }
-    }
-
-    static std::wstring DefaultBo3BinDir() {
-        const char* root = GetRootPath(); // e.g., E:\...\Call of Duty Black Ops III
-        if (!root || !*root) return {};
-        std::wstring wroot = Utf8ToWide(root);
-        if (wroot.empty()) return {};
-        if (wroot.back() == L'\\' || wroot.back() == L'/')
-            return wroot + L"bin";
-        return wroot + L"\\bin";
-    }
-
-    static std::wstring ComposeSqliteFullPath() {
-        std::wstring binDir = g_forcedSqliteBinDir.empty() ? DefaultBo3BinDir() : g_forcedSqliteBinDir;
-        if (binDir.empty()) return {};
-        if (binDir.back() == L'\\' || binDir.back() == L'/')
-            return binDir + L"sqlite64r.dll";
-        return binDir + L"\\sqlite64r.dll";
-    }
 
     static void EnsureSqliteLoaded() {
-        if (g_sql.loaded()) return;
-
-        std::wstring dllPath = ComposeSqliteFullPath();
-        if (dllPath.empty()) throw std::runtime_error("TA_TOOLS_PATH not set");
-        if (!FileExistsW(dllPath)) throw std::runtime_error("sqlite64r.dll not found");
-
-        HMODULE mod = LoadSqliteFromFullPath(dllPath);
-        if (!mod) throw std::runtime_error("LoadLibraryExW failed for sqlite64r.dll");
-
-        Require(g_sql.open_v2, mod, "sqlite3_open_v2");
-        Require(g_sql.close_v2, mod, "sqlite3_close_v2");
-        Require(g_sql.exec, mod, "sqlite3_exec");
-        Require(g_sql.prepare_v2, mod, "sqlite3_prepare_v2");
-        Require(g_sql.step, mod, "sqlite3_step");
-        Require(g_sql.finalize, mod, "sqlite3_finalize");
-        Require(g_sql.busy_timeout, mod, "sqlite3_busy_timeout");
-        Require(g_sql.errmsg, mod, "sqlite3_errmsg");
-        Require(g_sql.bind_int, mod, "sqlite3_bind_int");
-        Require(g_sql.column_text, mod, "sqlite3_column_text");
-        Require(g_sql.column_int, mod, "sqlite3_column_int");
-        Require(g_sql.column_type, mod, "sqlite3_column_type");
-
-        g_sql.libversion = reinterpret_cast<const char* (__cdecl*)(void)>(GetProcAddress(mod, "sqlite3_libversion"));
-        g_sql.libversion_number = reinterpret_cast<int(__cdecl*)(void)>(GetProcAddress(mod, "sqlite3_libversion_number"));
-
-        g_sql.mod = mod;
+        // No-op: SQLite is statically linked
     }
 } // anonymous namespace
 
-// Allow callers to override where to load sqlite64r.dll from (e.g., ...\bin)
-GDTDB_API void GdtDB_SetSqliteBinDir(const wchar_t* bo3BinDirW) {
-    std::lock_guard<std::mutex> lock(g_dbMutex);
-    g_forcedSqliteBinDir = bo3BinDirW ? bo3BinDirW : L"";
+// Deprecated: no longer needed with static linking
+GDTDB_API void GdtDB_SetSqliteBinDir(const wchar_t* /*bo3BinDirW*/) {
+    // No-op: SQLite is now statically linked
 }
 
 // ============================================================================
@@ -192,20 +98,36 @@ static void EnsureIndexes(sqlite3* db) {
 // ============================================================================
 GDTDB_CAPI int GdtDB_Init() {
     std::lock_guard<std::mutex> lock(g_dbMutex);
-    if (g_db) return SQLITE_OK;
+    if (g_db) {
+        OutputDebugStringA("GdtDB_Init: already initialized\n");
+        return SQLITE_OK;
+    }
 
     try { EnsureSqliteLoaded(); }
-    catch (...) { return SQLITE_CANTOPEN; }
+    catch (...) {
+        OutputDebugStringA("GdtDB_Init: EnsureSqliteLoaded failed\n");
+        return SQLITE_CANTOPEN;
+    }
 
     const char* path = GetGdtDbPath();
-    if (!path || !*path) return SQLITE_CANTOPEN;
+    if (!path || !*path) {
+        OutputDebugStringA("GdtDB_Init: GetGdtDbPath returned empty\n");
+        return SQLITE_CANTOPEN;
+    }
 
-    int rc = g_sql.open_v2(path, &g_db, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX, nullptr);
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "GdtDB_Init: opening %s\n", path);
+    OutputDebugStringA(buf);
+
+    int rc = g_sql.open_v2(path, &g_db, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nullptr);
     if (rc != SQLITE_OK) {
+        snprintf(buf, sizeof(buf), "GdtDB_Init: open failed rc=%d\n", rc);
+        OutputDebugStringA(buf);
         if (g_db) { g_sql.close_v2(g_db); g_db = nullptr; }
         return rc;
     }
 
+    OutputDebugStringA("GdtDB_Init: success\n");
     ApplyReadPragmas(g_db);
     EnsureIndexes(g_db);
     g_sql.busy_timeout(g_db, 250);
@@ -233,13 +155,21 @@ GDTDB_API std::map<std::string, gdt> GetGDTs() {
     std::map<std::string, gdt> results;
 
     sqlite3* db = GdtDB_Get();
-    if (!db) return results;
+    if (!db) {
+        OutputDebugStringA("GetGDTs: db is null\n");
+        return results;
+    }
 
     const char* sql = "SELECT PK_id, name, bOpenForEdit, timestamp FROM _gdt;";
     sqlite3_stmt* stmt = nullptr;
 
     int rc = g_sql.prepare_v2(db, sql, -1, &stmt, nullptr);
-    if (rc != SQLITE_OK) return results;
+    if (rc != SQLITE_OK) {
+        char buf[256];
+        snprintf(buf, sizeof(buf), "GetGDTs: prepare failed rc=%d err=%s\n", rc, g_sql.errmsg(db));
+        OutputDebugStringA(buf);
+        return results;
+    }
 
     while ((rc = g_sql.step(stmt)) == SQLITE_ROW) {
         int id = g_sql.column_int(stmt, 0);
@@ -255,6 +185,11 @@ GDTDB_API std::map<std::string, gdt> GetGDTs() {
     }
 
     g_sql.finalize(stmt);
+
+    char buf[256];
+    snprintf(buf, sizeof(buf), "GetGDTs: returning %zu results\n", results.size());
+    OutputDebugStringA(buf);
+
     return results;
 }
 
@@ -367,6 +302,91 @@ GDTDB_API std::map<std::string, entity> GetEntities(const gdt& GDT) {
         e.bExport = bExport;
 
         results[e.name] = std::move(e);
+    }
+
+    g_sql.finalize(stmt);
+    return results;
+}
+
+entity FindEntityByName(const std::string& name)
+{
+    // Create default invalid entity (will have id = -1)
+    entity ent;
+
+    // Get database handle
+    sqlite3* db = GdtDB_Get();
+    if (!db)
+        return ent;
+
+    // SQL query to find entity by name
+    const char* sql =
+        "SELECT PK_id, name, iGdtSeqNum, FK_parent_id, FK_gdf, FK_gdt, _gdt_linenum, bExport "
+        "FROM _entity WHERE name = ? LIMIT 1;";
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = g_sql.prepare_v2(db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK || !stmt)
+        return ent;
+
+    // Bind the asset name parameter
+    g_sql.bind_text(stmt, 1, name.c_str(), -1, SQLITE_STATIC);
+
+    // Execute query
+    rc = g_sql.step(stmt);
+    if (rc == SQLITE_ROW)
+    {
+        // Read entity data from query result
+        const int id = g_sql.column_int(stmt, 0);
+        const unsigned char* nameU8 = g_sql.column_text(stmt, 1);
+        const int seqNum = g_sql.column_int(stmt, 2);
+        const int parentID = (g_sql.column_type(stmt, 3) == SQLITE_NULL)
+            ? -1
+            : g_sql.column_int(stmt, 3);
+        const int gdfID = g_sql.column_int(stmt, 4);
+        const int gdtID = g_sql.column_int(stmt, 5);
+        const int lineNum = g_sql.column_int(stmt, 6);
+        const int bExport = g_sql.column_int(stmt, 7);
+
+        // Construct entity object
+        ent = entity(id,
+            reinterpret_cast<const char*>(nameU8 ? nameU8 : (const unsigned char*)""),
+            seqNum, parentID, gdfID, gdtID, lineNum);
+        ent.bExport = bExport;
+    }
+
+    g_sql.finalize(stmt);
+    return ent;
+}
+
+GDTDB_API std::vector<std::string> GetEntityNamesByType(const std::string& gdfName)
+{
+    std::vector<std::string> results;
+
+    sqlite3* db = GdtDB_Get();
+    if (!db)
+        return results;
+
+    // Query to get all entity names for a given GDF type
+    const char* sql =
+        "SELECT e.name FROM _entity e "
+        "INNER JOIN _gdf g ON e.FK_gdf = g.PK_id "
+        "WHERE g.name = ? "
+        "ORDER BY e.name;";
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = g_sql.prepare_v2(db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK || !stmt)
+        return results;
+
+    // Bind the GDF name parameter
+    g_sql.bind_text(stmt, 1, gdfName.c_str(), -1, SQLITE_STATIC);
+
+    // Execute query and collect results
+    while ((rc = g_sql.step(stmt)) == SQLITE_ROW) {
+        const unsigned char* nameU8 = g_sql.column_text(stmt, 0);
+        if (nameU8) {
+            results.push_back(reinterpret_cast<const char*>(nameU8));
+        }
     }
 
     g_sql.finalize(stmt);
@@ -516,8 +536,195 @@ GDTDB_API bool WriteGDTToFile(const gdt& GDT) {
     return true;
 }
 
+GDTDB_API bool WriteAssetToGDT(const std::string& assetName, const std::string& gdtPath,
+                                const std::map<std::string, std::string>& properties) {
+    if (assetName.empty() || gdtPath.empty())
+        return false;
+
+    // Read the entire GDT file
+    std::ifstream inFile(gdtPath);
+    if (!inFile.is_open())
+        return false;
+
+    std::string content((std::istreambuf_iterator<char>(inFile)),
+                         std::istreambuf_iterator<char>());
+    inFile.close();
+
+    // Find the asset entry: "assetname" (
+    std::string assetPattern = "\"" + assetName + "\" (";
+    size_t assetStart = content.find(assetPattern);
+    if (assetStart == std::string::npos) {
+        // Try alternate format without space
+        assetPattern = "\"" + assetName + "\"(";
+        assetStart = content.find(assetPattern);
+        if (assetStart == std::string::npos)
+            return false;
+    }
+
+    // Find the closing paren after the asset type
+    size_t parenClose = content.find(')', assetStart);
+    if (parenClose == std::string::npos)
+        return false;
+
+    // Find the opening brace for properties
+    size_t braceStart = content.find('{', parenClose);
+    if (braceStart == std::string::npos)
+        return false;
+
+    // Find the matching closing brace
+    int braceCount = 1;
+    size_t braceEnd = braceStart + 1;
+    while (braceEnd < content.size() && braceCount > 0) {
+        if (content[braceEnd] == '{')
+            braceCount++;
+        else if (content[braceEnd] == '}')
+            braceCount--;
+        braceEnd++;
+    }
+
+    if (braceCount != 0)
+        return false;
+
+    // Build the new properties block (sorted case-insensitively)
+    std::vector<std::pair<std::string, std::string>> sorted(properties.begin(), properties.end());
+    std::sort(sorted.begin(), sorted.end(),
+        [](const auto& a, const auto& b) {
+            const std::string al = ToLowerASCII(a.first);
+            const std::string bl = ToLowerASCII(b.first);
+            if (al != bl) return al < bl;
+            return a.first < b.first;
+        });
+
+    std::string newProps = "{\n";
+    for (const auto& [propName, propValue] : sorted) {
+        // Skip internal/empty keys
+        if (propName.empty() || propName[0] == '_' || propName == "PK_id")
+            continue;
+        newProps += "\t\t\"" + propName + "\" \"" + propValue + "\"\n";
+    }
+    newProps += "\t}";
+
+    // Replace the old properties block with the new one
+    std::string before = content.substr(0, braceStart);
+    std::string after = content.substr(braceEnd);
+    content = before + newProps + after;
+
+    // Write the file back
+    std::ofstream outFile(gdtPath, std::ios::trunc);
+    if (!outFile.is_open())
+        return false;
+
+    outFile << content;
+    outFile.close();
+
+    return true;
+}
+
+GDTDB_API bool RenameAssetInGDT(const std::string& oldName, const std::string& newName,
+                                 const std::string& gdtPath, const std::map<std::string, std::string>& properties) {
+    if (oldName.empty() || newName.empty() || gdtPath.empty())
+        return false;
+
+    // Read the entire GDT file
+    std::ifstream inFile(gdtPath);
+    if (!inFile.is_open())
+        return false;
+
+    std::string content((std::istreambuf_iterator<char>(inFile)),
+                         std::istreambuf_iterator<char>());
+    inFile.close();
+
+    // Find the asset entry by OLD name: "oldname" (
+    std::string assetPattern = "\"" + oldName + "\" (";
+    size_t assetStart = content.find(assetPattern);
+    if (assetStart == std::string::npos) {
+        // Try alternate format without space
+        assetPattern = "\"" + oldName + "\"(";
+        assetStart = content.find(assetPattern);
+        if (assetStart == std::string::npos)
+            return false;
+    }
+
+    // Find where the old name ends (the closing quote)
+    size_t nameStart = assetStart + 1;  // Skip opening quote
+    size_t nameEnd = content.find('"', nameStart);
+    if (nameEnd == std::string::npos)
+        return false;
+
+    // Replace old name with new name
+    content.replace(nameStart, nameEnd - nameStart, newName);
+
+    // Now find the properties block (recalculate positions after name change)
+    assetPattern = "\"" + newName + "\" (";
+    assetStart = content.find(assetPattern);
+    if (assetStart == std::string::npos) {
+        assetPattern = "\"" + newName + "\"(";
+        assetStart = content.find(assetPattern);
+        if (assetStart == std::string::npos)
+            return false;
+    }
+
+    // Find the closing paren after the asset type
+    size_t parenClose = content.find(')', assetStart);
+    if (parenClose == std::string::npos)
+        return false;
+
+    // Find the opening brace for properties
+    size_t braceStart = content.find('{', parenClose);
+    if (braceStart == std::string::npos)
+        return false;
+
+    // Find the matching closing brace
+    int braceCount = 1;
+    size_t braceEnd = braceStart + 1;
+    while (braceEnd < content.size() && braceCount > 0) {
+        if (content[braceEnd] == '{')
+            braceCount++;
+        else if (content[braceEnd] == '}')
+            braceCount--;
+        braceEnd++;
+    }
+
+    if (braceCount != 0)
+        return false;
+
+    // Build the new properties block (sorted case-insensitively)
+    std::vector<std::pair<std::string, std::string>> sorted(properties.begin(), properties.end());
+    std::sort(sorted.begin(), sorted.end(),
+        [](const auto& a, const auto& b) {
+            const std::string al = ToLowerASCII(a.first);
+            const std::string bl = ToLowerASCII(b.first);
+            if (al != bl) return al < bl;
+            return a.first < b.first;
+        });
+
+    std::string newProps = "{\n";
+    for (const auto& [propName, propValue] : sorted) {
+        // Skip internal/empty keys
+        if (propName.empty() || propName[0] == '_' || propName == "PK_id")
+            continue;
+        newProps += "\t\t\"" + propName + "\" \"" + propValue + "\"\n";
+    }
+    newProps += "\t}";
+
+    // Replace the old properties block with the new one
+    std::string before = content.substr(0, braceStart);
+    std::string after = content.substr(braceEnd);
+    content = before + newProps + after;
+
+    // Write the file back
+    std::ofstream outFile(gdtPath, std::ios::trunc);
+    if (!outFile.is_open())
+        return false;
+
+    outFile << content;
+    outFile.close();
+
+    return true;
+}
+
 // ============================================================================
-// Launch gdtdb.exe /update and print its stdout/stderr
+// Launch gdtdb.exe /update
 // ============================================================================
 GDTDB_API bool RunGdtDbUpdate() {
     const char* root = GetRootPath();
@@ -531,58 +738,25 @@ GDTDB_API bool RunGdtDbUpdate() {
     cmd += exePath;
     cmd += "\" /update";
 
-    // Create pipes for stdout/stderr capture
-    SECURITY_ATTRIBUTES sa{};
-    sa.nLength = sizeof(sa);
-    sa.bInheritHandle = TRUE;
-    sa.lpSecurityDescriptor = nullptr;
-
-    HANDLE hRead = nullptr, hWrite = nullptr;
-    if (!CreatePipe(&hRead, &hWrite, &sa, 0)) return false;
-    if (!SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, 0)) {
-        CloseHandle(hRead); CloseHandle(hWrite);
-        return false;
-    }
-
     STARTUPINFOA si{};
     PROCESS_INFORMATION pi{};
     si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdOutput = hWrite;  // redirect child's stdout
-    si.hStdError = hWrite;  // redirect child's stderr
-    si.hStdInput = nullptr;
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
 
     BOOL ok = CreateProcessA(
         nullptr,
         cmd.data(),
         nullptr, nullptr,
-        TRUE,                   // inherit handles so child can use hWrite
+        FALSE,
         CREATE_NO_WINDOW,
         nullptr, nullptr,
         &si, &pi
     );
 
-    // Parent doesn't need the write end
-    CloseHandle(hWrite);
-
     if (!ok) {
-        CloseHandle(hRead);
         return false;
     }
-
-    // Read child's combined stdout/stderr and print it
-    char buffer[4096];
-    DWORD bytesRead = 0;
-    for (;;) {
-        BOOL readOK = ReadFile(hRead, buffer, sizeof(buffer) - 1, &bytesRead, nullptr);
-        if (!readOK || bytesRead == 0) break;
-        buffer[bytesRead] = '\0';
-        // Print exactly what the exe produced:
-        std::fwrite(buffer, 1, bytesRead, stdout);
-        std::fflush(stdout);
-    }
-
-    CloseHandle(hRead);
 
     WaitForSingleObject(pi.hProcess, INFINITE);
     DWORD exitCode = 1;
@@ -594,7 +768,314 @@ GDTDB_API bool RunGdtDbUpdate() {
 }
 
 // ============================================================================
-// Launch gdtdb.exe /rebuild and print its stdout/stderr
+// Get all GDF type names (asset types)
+// ============================================================================
+GDTDB_API std::vector<std::string> GetGDFTypes() {
+    std::vector<std::string> results;
+
+    sqlite3* db = GdtDB_Get();
+    if (!db) return results;
+
+    const char* sql = "SELECT name FROM _gdf ORDER BY name;";
+    sqlite3_stmt* stmt = nullptr;
+
+    int rc = g_sql.prepare_v2(db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) return results;
+
+    while ((rc = g_sql.step(stmt)) == SQLITE_ROW) {
+        const unsigned char* nameU8 = g_sql.column_text(stmt, 0);
+        if (nameU8) {
+            results.emplace_back(reinterpret_cast<const char*>(nameU8));
+        }
+    }
+
+    g_sql.finalize(stmt);
+    return results;
+}
+
+// ============================================================================
+// Get default property values for a GDF type from _meta table
+// ============================================================================
+GDTDB_API std::map<std::string, std::string> GetGDFDefaultProperties(const std::string& gdfName) {
+    std::map<std::string, std::string> results;
+
+    sqlite3* db = GdtDB_Get();
+    if (!db) return results;
+
+    // Query _meta table for default values
+    const char* sql = "SELECT _key, _default FROM _meta WHERE _name = ? ORDER BY _index;";
+    sqlite3_stmt* stmt = nullptr;
+
+    int rc = g_sql.prepare_v2(db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) return results;
+
+    g_sql.bind_text(stmt, 1, gdfName.c_str(), -1, SQLITE_STATIC);
+
+    while ((rc = g_sql.step(stmt)) == SQLITE_ROW) {
+        const unsigned char* keyU8 = g_sql.column_text(stmt, 0);
+        const unsigned char* valueU8 = g_sql.column_text(stmt, 1);
+
+        if (keyU8) {
+            std::string key = reinterpret_cast<const char*>(keyU8);
+            std::string value = valueU8 ? reinterpret_cast<const char*>(valueU8) : "";
+            results[key] = value;
+        }
+    }
+
+    g_sql.finalize(stmt);
+    return results;
+}
+
+// ============================================================================
+// Create a new asset with default values and append to GDT file
+// ============================================================================
+GDTDB_API bool CreateNewAsset(const std::string& assetName, const std::string& gdfName, const std::string& gdtPath) {
+    if (assetName.empty() || gdfName.empty() || gdtPath.empty())
+        return false;
+
+    // Check if asset already exists
+    entity existing = FindEntityByName(assetName);
+    if (existing.id != -1) {
+        return false; // Asset already exists
+    }
+
+    // Get default properties for this GDF type
+    std::map<std::string, std::string> defaults = GetGDFDefaultProperties(gdfName);
+
+    // Read the entire GDT file
+    std::ifstream inFile(gdtPath);
+    if (!inFile.is_open())
+        return false;
+
+    std::string content((std::istreambuf_iterator<char>(inFile)),
+                         std::istreambuf_iterator<char>());
+    inFile.close();
+
+    // Find the last closing brace (the end of the GDT)
+    size_t lastBrace = content.rfind('}');
+    if (lastBrace == std::string::npos)
+        return false;
+
+    // Build the new asset entry
+    std::string newEntry = "\t\"" + assetName + "\" ( \"" + gdfName + ".gdf\" )\n\t{\n";
+
+    // Sort properties case-insensitively
+    std::vector<std::pair<std::string, std::string>> sorted(defaults.begin(), defaults.end());
+    std::sort(sorted.begin(), sorted.end(),
+        [](const auto& a, const auto& b) {
+            const std::string al = ToLowerASCII(a.first);
+            const std::string bl = ToLowerASCII(b.first);
+            if (al != bl) return al < bl;
+            return a.first < b.first;
+        });
+
+    for (const auto& [propName, propValue] : sorted) {
+        // Skip internal keys
+        if (propName.empty() || propName[0] == '_')
+            continue;
+        newEntry += "\t\t\"" + propName + "\" \"" + propValue + "\"\n";
+    }
+
+    newEntry += "\t}\n";
+
+    // Insert the new entry before the last closing brace
+    std::string before = content.substr(0, lastBrace);
+    std::string after = content.substr(lastBrace);
+    content = before + newEntry + after;
+
+    // Write the file back
+    std::ofstream outFile(gdtPath, std::ios::trunc);
+    if (!outFile.is_open())
+        return false;
+
+    outFile << content;
+    outFile.close();
+
+    return true;
+}
+
+// ============================================================================
+// Append a new asset with given properties to GDT file
+// ============================================================================
+GDTDB_API bool AppendAssetToGDT(const std::string& assetName, const std::string& gdfName,
+                                 const std::string& gdtPath, const std::map<std::string, std::string>& properties) {
+    if (assetName.empty() || gdfName.empty() || gdtPath.empty())
+        return false;
+
+    // Read the entire GDT file
+    std::ifstream inFile(gdtPath);
+    if (!inFile.is_open())
+        return false;
+
+    std::string content((std::istreambuf_iterator<char>(inFile)),
+                         std::istreambuf_iterator<char>());
+    inFile.close();
+
+    // Find the last closing brace (the end of the GDT)
+    size_t lastBrace = content.rfind('}');
+    if (lastBrace == std::string::npos)
+        return false;
+
+    // Build the new asset entry
+    std::string newEntry = "\t\"" + assetName + "\" ( \"" + gdfName + ".gdf\" )\n\t{\n";
+
+    // Sort properties case-insensitively
+    std::vector<std::pair<std::string, std::string>> sorted(properties.begin(), properties.end());
+    std::sort(sorted.begin(), sorted.end(),
+        [](const auto& a, const auto& b) {
+            const std::string al = ToLowerASCII(a.first);
+            const std::string bl = ToLowerASCII(b.first);
+            if (al != bl) return al < bl;
+            return a.first < b.first;
+        });
+
+    for (const auto& [propName, propValue] : sorted) {
+        // Skip internal keys
+        if (propName.empty() || propName[0] == '_')
+            continue;
+        newEntry += "\t\t\"" + propName + "\" \"" + propValue + "\"\n";
+    }
+
+    newEntry += "\t}\n";
+
+    // Insert the new entry before the last closing brace
+    std::string before = content.substr(0, lastBrace);
+    std::string after = content.substr(lastBrace);
+    content = before + newEntry + after;
+
+    // Write the file back
+    std::ofstream outFile(gdtPath, std::ios::trunc);
+    if (!outFile.is_open())
+        return false;
+
+    outFile << content;
+    outFile.close();
+
+    return true;
+}
+
+// ============================================================================
+// Delete an asset from a GDT file
+// ============================================================================
+GDTDB_API bool DeleteAssetFromGDT(const std::string& assetName, const std::string& gdtPath) {
+    if (assetName.empty() || gdtPath.empty())
+        return false;
+
+    // Read the entire GDT file
+    std::ifstream inFile(gdtPath);
+    if (!inFile.is_open())
+        return false;
+
+    std::string content((std::istreambuf_iterator<char>(inFile)),
+                         std::istreambuf_iterator<char>());
+    inFile.close();
+
+    // Detect line ending style used in file
+    std::string lineEnding = "\n";
+    if (content.find("\r\n") != std::string::npos)
+        lineEnding = "\r\n";
+
+    // Find the asset entry: "assetname" (
+    std::string assetPattern = "\"" + assetName + "\" (";
+    size_t assetStart = content.find(assetPattern);
+    if (assetStart == std::string::npos) {
+        // Try alternate format without space
+        assetPattern = "\"" + assetName + "\"(";
+        assetStart = content.find(assetPattern);
+        if (assetStart == std::string::npos)
+            return false;  // Asset not found in file
+    }
+
+    // Find the closing paren after the asset type
+    size_t parenClose = content.find(')', assetStart);
+    if (parenClose == std::string::npos)
+        return false;
+
+    // Find the opening brace for properties
+    size_t braceStart = content.find('{', parenClose);
+    if (braceStart == std::string::npos)
+        return false;
+
+    // Find the matching closing brace
+    int braceCount = 1;
+    size_t braceEnd = braceStart + 1;
+    while (braceEnd < content.size() && braceCount > 0) {
+        if (content[braceEnd] == '{')
+            braceCount++;
+        else if (content[braceEnd] == '}')
+            braceCount--;
+        braceEnd++;
+    }
+
+    if (braceCount != 0)
+        return false;
+
+    // braceEnd now points to the position right after the closing '}'
+    // The asset entry spans from the line containing "assetname" to the line containing '}'
+
+    // Find the start of this asset's line by scanning back to find a newline
+    size_t entryStart = assetStart;
+    while (entryStart > 0) {
+        char c = content[entryStart - 1];
+        if (c == '\n')
+            break;
+        entryStart--;
+    }
+    // entryStart now points to the first character of the asset's line (typically a tab)
+
+    // Find the end of the closing brace's line
+    size_t entryEnd = braceEnd;
+    // Skip any characters on the same line as the closing brace (there shouldn't be any)
+    while (entryEnd < content.size() && content[entryEnd] != '\n' && content[entryEnd] != '\r')
+        entryEnd++;
+    // Consume the line ending
+    if (entryEnd < content.size() && content[entryEnd] == '\r')
+        entryEnd++;
+    if (entryEnd < content.size() && content[entryEnd] == '\n')
+        entryEnd++;
+
+    // Build the result
+    std::string before = content.substr(0, entryStart);
+    std::string after = content.substr(entryEnd);
+
+    // Check if we're deleting the first asset (before would end with just "{" or "{\r\n" etc.)
+    // We need to ensure the opening brace is followed by a newline
+    bool isFirstAsset = false;
+    size_t checkPos = before.size();
+    // Skip back past any whitespace/newlines
+    while (checkPos > 0 && (before[checkPos - 1] == ' ' || before[checkPos - 1] == '\t' ||
+                             before[checkPos - 1] == '\r' || before[checkPos - 1] == '\n'))
+        checkPos--;
+    if (checkPos > 0 && before[checkPos - 1] == '{')
+        isFirstAsset = true;
+
+    // Ensure proper formatting
+    if (isFirstAsset) {
+        // Trim 'before' to just the opening brace and proper line ending
+        size_t openBrace = before.rfind('{');
+        if (openBrace != std::string::npos) {
+            before = before.substr(0, openBrace + 1) + lineEnding;
+        }
+    }
+
+    // Ensure 'after' starts with proper indentation if there's content
+    // (it should already have the tab from the next asset's line)
+
+    content = before + after;
+
+    // Write the file back using binary mode to preserve line endings
+    std::ofstream outFile(gdtPath, std::ios::trunc | std::ios::binary);
+    if (!outFile.is_open())
+        return false;
+
+    outFile << content;
+    outFile.close();
+
+    return true;
+}
+
+// ============================================================================
+// Launch gdtdb.exe /rebuild
 // ============================================================================
 GDTDB_API bool RunGdtDbRebuild() {
     const char* root = GetRootPath();
@@ -608,58 +1089,25 @@ GDTDB_API bool RunGdtDbRebuild() {
     cmd += exePath;
     cmd += "\" /rebuild";
 
-    // Create pipes for stdout/stderr capture
-    SECURITY_ATTRIBUTES sa{};
-    sa.nLength = sizeof(sa);
-    sa.bInheritHandle = TRUE;
-    sa.lpSecurityDescriptor = nullptr;
-
-    HANDLE hRead = nullptr, hWrite = nullptr;
-    if (!CreatePipe(&hRead, &hWrite, &sa, 0)) return false;
-    if (!SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, 0)) {
-        CloseHandle(hRead); CloseHandle(hWrite);
-        return false;
-    }
-
     STARTUPINFOA si{};
     PROCESS_INFORMATION pi{};
     si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdOutput = hWrite;  // redirect child's stdout
-    si.hStdError = hWrite;  // redirect child's stderr
-    si.hStdInput = nullptr;
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
 
     BOOL ok = CreateProcessA(
         nullptr,
         cmd.data(),
         nullptr, nullptr,
-        TRUE,                   // inherit handles so child can use hWrite
+        FALSE,
         CREATE_NO_WINDOW,
         nullptr, nullptr,
         &si, &pi
     );
 
-    // Parent doesn't need the write end
-    CloseHandle(hWrite);
-
     if (!ok) {
-        CloseHandle(hRead);
         return false;
     }
-
-    // Read child's combined stdout/stderr and print it
-    char buffer[4096];
-    DWORD bytesRead = 0;
-    for (;;) {
-        BOOL readOK = ReadFile(hRead, buffer, sizeof(buffer) - 1, &bytesRead, nullptr);
-        if (!readOK || bytesRead == 0) break;
-        buffer[bytesRead] = '\0';
-        // Print exactly what the exe produced:
-        std::fwrite(buffer, 1, bytesRead, stdout);
-        std::fflush(stdout);
-    }
-
-    CloseHandle(hRead);
 
     WaitForSingleObject(pi.hProcess, INFINITE);
     DWORD exitCode = 1;

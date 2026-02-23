@@ -6,6 +6,7 @@ Set-Content -Encoding ascii .gitignore @"
 *.VC.db
 *.VC.opendb
 ipch/
+.vscode/
 
 # Build dirs & temp
 x64/

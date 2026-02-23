@@ -1,10 +1,8 @@
-// GDTLib.h  (replace the first lines)
-
 #pragma once
-// #include <sqlite3.h>           // remove this include from the public header
 #include <map>
 #include <unordered_map>
 #include <string>
+#include <vector>
 #include "gdt.h"
 #include "entity.h"
 #pragma warning(disable : 4996)
@@ -46,8 +44,36 @@ GDTDB_API std::map<std::string, gdt> GetGDTs();
 GDTDB_API std::map<std::string, entity> GetEntities();
 GDTDB_API std::map<std::string, entity> GetEntities(const gdt& GDT);
 GDTDB_API std::unordered_map<int, std::map<std::string, entity>> GetEntitiesByGdt();
+GDTDB_API entity FindEntityByName(const std::string& name);
+GDTDB_API std::vector<std::string> GetEntityNamesByType(const std::string& gdfName);
 GDTDB_API std::map<std::string, std::string> GetEntityProperties(const entity& ent);
 GDTDB_API bool WriteGDTToFile(const gdt& GDT);
+GDTDB_API bool WriteAssetToGDT(const std::string& assetName, const std::string& gdtPath,
+                                const std::map<std::string, std::string>& properties);
+
+// Get all GDF type names (asset types)
+GDTDB_API std::vector<std::string> GetGDFTypes();
+
+// Get default property values for a GDF type from _meta table
+GDTDB_API std::map<std::string, std::string> GetGDFDefaultProperties(const std::string& gdfName);
+
+// Create a new asset with default values and append to GDT file
+// Returns true on success, false on failure
+GDTDB_API bool CreateNewAsset(const std::string& assetName, const std::string& gdfName, const std::string& gdtPath);
+
+// Append a new asset with given properties to GDT file
+// Returns true on success, false on failure
+GDTDB_API bool AppendAssetToGDT(const std::string& assetName, const std::string& gdfName,
+                                 const std::string& gdtPath, const std::map<std::string, std::string>& properties);
+
+// Rename an asset in a GDT file and update its properties
+// Returns true on success, false on failure
+GDTDB_API bool RenameAssetInGDT(const std::string& oldName, const std::string& newName,
+                                 const std::string& gdtPath, const std::map<std::string, std::string>& properties);
+
+// Delete an asset from a GDT file
+// Returns true on success, false on failure
+GDTDB_API bool DeleteAssetFromGDT(const std::string& assetName, const std::string& gdtPath);
 
 // (Optional) Let callers override where to load sqlite64r.dll from.
 // If not called, we default to:  GetRootPath() + "\\bin"
